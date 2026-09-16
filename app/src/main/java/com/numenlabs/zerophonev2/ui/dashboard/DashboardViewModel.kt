@@ -87,7 +87,26 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
     }
 
     init {
+        seedFromPersistentCache()
         refreshApps()
+    }
+
+    /** Instant cold-start content: persisted labels + cached icon PNGs (fast disk read). */
+    private fun seedFromPersistentCache() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val state = app.container.repository.snapshot()
+                val seeded =
+                    state.distractingPackages.mapNotNull { pkg ->
+                        val label = state.appLabels[pkg] ?: return@mapNotNull null
+                        com.numenlabs.zerophonev2.data.IconCache.load(app, pkg)?.let { icon ->
+                            pkg to DistractingApp(pkg, label, icon, false)
+                        }
+                    }.toMap()
+                if (seeded.isNotEmpty()) labels.value = seeded
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun refreshApps() {
@@ -97,8 +116,8 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
                 catalog.associate { info ->
                     info.packageName to DistractingApp(info.packageName, info.label, info.icon, false)
                 }
-            // Persist labels of distracting apps so a cold start never flashes
-            // raw package names while the catalog query is still running.
+            // Persist labels + icons of distracting apps so a cold start never
+            // flashes raw package names / empty tiles while the query runs.
             try {
                 val state = app.container.repository.snapshot()
                 val wanted = state.distractingPackages
@@ -106,6 +125,12 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
                     val fresh = catalog.filter { it.packageName in wanted }.map { it.packageName to it.label }
                     if (fresh.toMap() != state.appLabels.filterKeys { it in wanted }) {
                         app.container.repository.update { it.copy(appLabels = fresh.toMap()) }
+                    }
+                    launch(kotlinx.coroutines.Dispatchers.IO) {
+                        catalog.filter { it.packageName in wanted && it.icon != null }.forEach {
+                            com.numenlabs.zerophonev2.data.IconCache.save(app, it.packageName, it.icon!!)
+                        }
+                        com.numenlabs.zerophonev2.data.IconCache.prune(app, wanted)
                     }
                 }
             } catch (_: Exception) {
