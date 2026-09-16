@@ -95,6 +95,16 @@ class EnforcementEngine(
     var foregroundPackage: String? = null
         private set
 
+    /**
+     * Foreground confirmed by 2+ consecutive polls. The grayscale hysteresis
+     * uses it: entering a color app switches instantly, but LEAVING color
+     * requires a stable foreign foreground — otherwise every transient
+     * system dialog/transition flash flickers the screen gray and back.
+     */
+    @Volatile
+    var stableForegroundPackage: String? = null
+        private set
+
     /** Called by the watcher on every foreground CHANGE (color switches — no debounce needed). */
     fun onForegroundChanged(pkg: String?) {
         foregroundPackage = pkg
@@ -113,8 +123,11 @@ class EnforcementEngine(
      * short grace period after the window opened protects the launch itself.
      */
     fun onForegroundStable(pkg: String?) {
+        stableForegroundPackage = pkg
         scope.launch {
             try {
+                // A settled non-color foreground is what finally turns grayscale back on.
+                applyGrayscaleTarget(repository.snapshot(), pkg)
                 val state = repository.snapshot()
                 val grant = state.activeGrant ?: return@launch
                 if (!grant.perSession) return@launch
@@ -142,8 +155,10 @@ class EnforcementEngine(
     }
 
     /**
-     * Grayscale write with the per-app color exception: writes only when the
-     * pair differs (echo-loop guard).
+     * Grayscale write with the per-app color exception + hysteresis: color
+     * applies while the LATEST foreground is a color app (instant on), and
+     * stays applied until the STABLE foreground is a non-color app (no
+     * flicker on transition flashes). Writes only when the pair differs.
      */
     private fun applyGrayscaleTarget(
         state: AppState,
@@ -152,7 +167,9 @@ class EnforcementEngine(
         // Grayscale globally off (pre-lock toggle / deactivated) — nothing to enforce.
         if (!state.grayscaleEnforced) return
         if (!grayscale.hasWritePermission()) return
-        val colorApp = pkg != null && pkg in state.colorPackages
+        val colorApp =
+            (pkg != null && pkg in state.colorPackages) ||
+                (stableForegroundPackage != null && stableForegroundPackage in state.colorPackages)
         val target =
             if (colorApp) {
                 GrayscalePolicy.Values(0, GrayscalePolicy.MODE_DISABLED)
