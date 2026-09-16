@@ -458,20 +458,24 @@ private fun GateContent(
     var cameraRect by remember { mutableStateOf<Rect?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Soft glow AROUND the camera, fading toward the screen edges; during the
-        // launch it dissolves while its outline expands outward ("улетает в края").
+        // The light itself. Phase 1: a soft glow AROUND the camera preview,
+        // fading toward the screen edges. On «Запускаем» the outline flies apart
+        // toward the edges while the glow MORPHS into a dim ambient light in the
+        // screen center — the face must stay illuminated for detection, so the
+        // light never fully disappears.
         val rect = cameraRect
-        if (rect != null) {
+        if (lightOn) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val p = fly.value
-                val glowAlpha = (if (lightOn) lightLevel * 0.85f else 0f) * (1f - p)
-                if (glowAlpha > 0.015f) {
+                // Around the camera (phase 1) — dissolving during the launch.
+                val previewAlpha = lightLevel * 0.85f * (1f - p)
+                if (previewAlpha > 0.015f && rect != null) {
                     val center = rect.center
                     val radius = max(size.width, size.height) * 0.95f
                     drawCircle(
                         brush =
                             Brush.radialGradient(
-                                colors = listOf(Color.White.copy(alpha = glowAlpha), Color.Transparent),
+                                colors = listOf(Color.White.copy(alpha = previewAlpha), Color.Transparent),
                                 center = center,
                                 radius = radius,
                             ),
@@ -479,7 +483,24 @@ private fun GateContent(
                         center = center,
                     )
                 }
-                if (p > 0f && p < 1f) {
+                // Ambient (phase 2) — fades in behind the countdown ring.
+                val ambientAlpha = lightLevel * 0.7f * p
+                if (ambientAlpha > 0.015f) {
+                    val center = Offset(size.width / 2f, size.height / 2f)
+                    val radius = max(size.width, size.height) * 0.8f
+                    drawCircle(
+                        brush =
+                            Brush.radialGradient(
+                                colors = listOf(Color.White.copy(alpha = ambientAlpha), Color.Transparent),
+                                center = center,
+                                radius = radius,
+                            ),
+                        radius = radius,
+                        center = center,
+                    )
+                }
+                // The departing outline ("обводка") of the camera box.
+                if (p > 0f && p < 1f && rect != null) {
                     val w = rect.width * (1f + 7f * p)
                     val h = rect.height * (1f + 7f * p)
                     val c = rect.center
