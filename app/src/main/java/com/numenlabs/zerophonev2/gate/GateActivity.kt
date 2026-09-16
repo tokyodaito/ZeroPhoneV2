@@ -24,8 +24,13 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +81,9 @@ class GateActivity : ComponentActivity() {
     private var faceAnalyzer: FaceAnalyzer? = null
     private var cameraPermissionRequested = false
 
+    /** Created once, reused by AndroidView in the Compose tree and by camera binding. */
+    private lateinit var previewView: androidx.camera.view.PreviewView
+
     /** The CAMERA permission dialog steals window focus — that is not a distraction. */
     private var permissionDialogShowing = false
 
@@ -120,6 +128,11 @@ class GateActivity : ComponentActivity() {
                 GateViewModel.Factory(application as ZeroPhoneApp, targetPackage),
             )[GateViewModel::class.java]
 
+        previewView =
+            androidx.camera.view.PreviewView(this).apply {
+                scaleType = androidx.camera.view.PreviewView.ScaleType.FILL_CENTER
+            }
+
         lifecycleScope.launch {
             viewModel!!.vmEvents.collect { event ->
                 when (event) {
@@ -152,6 +165,7 @@ class GateActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     GateContent(
                         viewModel = viewModel!!,
+                        previewView = previewView,
                         onOpenAppSettings = ::openAppSettings,
                     )
                 }
@@ -224,8 +238,8 @@ class GateActivity : ComponentActivity() {
         val vm = viewModel ?: return
         // One analyzer (and its native detector) per activity; rebound on every onStart.
         val analyzer =
-            faceAnalyzer ?: FaceAnalyzer { looking ->
-                mainHandler.post { vm.onFaceFrame(looking) }
+            faceAnalyzer ?: FaceAnalyzer { frame ->
+                mainHandler.post { vm.onFaceFrame(frame) }
             }.also { faceAnalyzer = it }
         val executor = analysisExecutor ?: Executors.newSingleThreadExecutor().also { analysisExecutor = it }
         val future = ProcessCameraProvider.getInstance(this)
@@ -234,13 +248,17 @@ class GateActivity : ComponentActivity() {
                 try {
                     val provider = future.get()
                     cameraProvider = provider
+                    val preview =
+                        androidx.camera.core.Preview.Builder()
+                            .build()
+                            .also { it.setSurfaceProvider(previewView.surfaceProvider) }
                     val analysis =
                         ImageAnalysis.Builder()
                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                             .build()
                             .also { it.setAnalyzer(executor, analyzer) }
                     provider.unbindAll()
-                    provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+                    provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, preview, analysis)
                 } catch (_: Exception) {
                     mainHandler.post { vm.onCameraError() }
                 }
@@ -365,10 +383,12 @@ private fun darkColorSchemeCompat() =
 @Composable
 private fun GateContent(
     viewModel: GateViewModel,
+    previewView: androidx.camera.view.PreviewView,
     onOpenAppSettings: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
     val totalSeconds by viewModel.totalSeconds.collectAsState()
+    val faceOverlay by viewModel.faceOverlay.collectAsState()
     val context = LocalContext.current
 
     Column(
@@ -389,8 +409,39 @@ private fun GateContent(
             style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 32.dp),
+            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
         )
+
+        // Live front-camera feed with the face "графы" colored by attention status.
+        val current = state
+        val overlayStatus =
+            when {
+                current is GateState.Stopped -> com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.NO_FACE
+                current is GateState.Watching && current.attentionHeld ->
+                    com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.ATTENTION
+
+                faceOverlay?.faceFound == true ->
+                    com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.WARMING_UP
+
+                else -> com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.NO_FACE
+            }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth(0.72f)
+                    .aspectRatio(3f / 4f)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                    .background(Color(0xFF101010)),
+        ) {
+            androidx.compose.ui.viewinterop.AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+            com.numenlabs.zerophonev2.ui.components.FaceOverlayCanvas(
+                data = faceOverlay,
+                status = overlayStatus,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
 
         Box(contentAlignment = Alignment.Center) {
             CountdownRing(

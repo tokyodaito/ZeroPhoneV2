@@ -37,6 +37,10 @@ class GateViewModel(
     private val _uiState = MutableStateFlow<GateState>(GateState.Idle)
     val uiState: StateFlow<GateState> = _uiState.asStateFlow()
 
+    /** Latest face frame for the live camera overlay (contours, bbox, flags). */
+    private val _faceOverlay = MutableStateFlow<FaceUiData?>(null)
+    val faceOverlay: StateFlow<FaceUiData?> = _faceOverlay.asStateFlow()
+
     private val _totalSeconds = MutableStateFlow(60)
     val totalSeconds: StateFlow<Int> = _totalSeconds.asStateFlow()
 
@@ -87,7 +91,9 @@ class GateViewModel(
     }
 
     /** From FaceAnalyzer — must survive configuration/recreation churn. */
-    fun onFaceFrame(looking: Boolean) {
+    fun onFaceFrame(data: FaceUiData) {
+        _faceOverlay.value = data
+        val looking = data.faceFound && data.eyesOpenEnough
         val event =
             attention.onFrame(SystemClock.elapsedRealtime(), looking)?.let { policyEvent ->
                 when (policyEvent) {
