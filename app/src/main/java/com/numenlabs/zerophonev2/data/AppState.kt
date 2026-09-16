@@ -10,6 +10,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AppState(
     val distractingPackages: Set<String> = emptySet(),
+    /**
+     * Protected apps (e.g. banking): suspended like distracting ones, but the
+     * entry gate is biometrics + a short face check instead of the 60-second
+     * attention wait; the window lasts until the app is minimized.
+     */
+    val protectedPackages: Set<String> = emptySet(),
     /** Cached labels of distracting apps: instant proper names on cold start. */
     val appLabels: Map<String, String> = emptyMap(),
     /** Per-app switches for distracting apps (per-session unlock). */

@@ -175,6 +175,25 @@ fun DashboardScreen(
                     activePackage = uiState.appState.activeGrant?.packageName,
                 )
             }
+            if (uiState.protectedApps.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    stringResource(R.string.dashboard_protected_section),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                AppIconGrid(
+                    apps =
+                        uiState.protectedApps.map {
+                            com.numenlabs.zerophonev2.ui.AppInfo(it.packageName, it.label, it.icon)
+                        },
+                    onAppClick = { appInfo ->
+                        uiState.protectedApps
+                            .firstOrNull { it.packageName == appInfo.packageName }
+                            ?.let { viewModel.onAppClicked(it) }
+                    },
+                    activePackage = uiState.appState.activeGrant?.packageName,
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

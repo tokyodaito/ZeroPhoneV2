@@ -58,6 +58,13 @@ class SettingsViewModel(private val app: ZeroPhoneApp) : ViewModel() {
         }
     }
 
+    fun setProtectedApps(packages: Set<String>) {
+        viewModelScope.launch {
+            app.container.repository.update { it.copy(protectedPackages = packages) }
+            requestReconcile()
+        }
+    }
+
     fun setGrayscale(enabled: Boolean) {
         viewModelScope.launch {
             app.container.repository.update { it.copy(grayscaleEnforced = enabled) }

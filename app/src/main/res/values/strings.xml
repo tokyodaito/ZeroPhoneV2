@@ -116,6 +116,17 @@
     <string name="gate_preview_ok">Всё ок? Жмите «Запускаем» — и смотрите на экран</string>
     <string name="gate_progressive_note">Входов сегодня: %1$d — проверка выросла до %2$d с (макс. 3 мин)</string>
     <string name="gate_open_settings">Открыть настройки приложения</string>
+
+    <!-- Biometric gate (protected apps) -->
+    <string name="biogate_title">Защищённый вход</string>
+    <string name="biogate_wait_prompt">Подтвердите вход отпечатком пальца или лицом</string>
+    <string name="biogate_face_progress">Смотрите в камеру: %1$d…</string>
+    <string name="protected_apps_title">Защищённые приложения</string>
+    <string name="protected_apps_hint">Банки и всё ценное: приложение приостановлено системой и открывается только через отпечаток/лицо + короткую проверку камеры. Пока приложение в списке, его push-уведомления скрыты. Список фиксируется после блокировки настроек.</string>
+    <string name="protected_apps_selected">Выбрано: %1$d</string>
+    <string name="protected_apps_locked">🔒 Список зафиксирован блокировкой — изменить нельзя.</string>
+    <string name="settings_protected_apps">Защищённые приложения (%1$d)</string>
+    <string name="dashboard_protected_section">🔒 Защищённые</string>
     <string name="gate_completed">Проверка пройдена</string>
     <string name="gate_camera_privacy">Анализ идёт только на устройстве. Во время проверки горит индикатор камеры.</string>
     <string name="gate_remaining_seconds">%1$d с</string>

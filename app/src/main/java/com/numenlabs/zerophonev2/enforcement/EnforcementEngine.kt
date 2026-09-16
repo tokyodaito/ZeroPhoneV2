@@ -205,7 +205,9 @@ class EnforcementEngine(
                     nowEffectiveMillis = effectiveNowMillis(state),
                     durationMillis = state.grantDurationMillis,
                     id = UUID.randomUUID().toString(),
-                    perSession = state.perAppConfig[packageName]?.perSession == true,
+                    perSession =
+                        state.perAppConfig[packageName]?.perSession == true ||
+                            packageName in state.protectedPackages,
                 )
             // Progressive gate: count this successful entry (per-app, daily).
             val today = java.time.LocalDate.now().toString()
@@ -307,7 +309,7 @@ class EnforcementEngine(
             val fullRelease =
                 SuspendSetComputer.computeFullReleaseSet(
                     lastSuspended = state.lastSuspended,
-                    distractingPackages = state.distractingPackages,
+                    distractingPackages = state.distractingPackages + state.protectedPackages,
                     activeGrantPackage = state.activeGrant?.packageName,
                 )
             suspension.setPackagesSuspendedSafely(fullRelease, suspended = false)
@@ -382,7 +384,7 @@ class EnforcementEngine(
         val activeGrantPackage = state.activeGrant?.packageName
         var target =
             SuspendSetComputer.computeSuspendSet(
-                distractingPackages = state.distractingPackages,
+                distractingPackages = state.distractingPackages + state.protectedPackages,
                 selfPackage = appContext.packageName,
                 protectedPackages =
                     SuspendSetComputer.DEFAULT_PROTECTED_PACKAGES + suspension.dynamicProtectedPackages(),

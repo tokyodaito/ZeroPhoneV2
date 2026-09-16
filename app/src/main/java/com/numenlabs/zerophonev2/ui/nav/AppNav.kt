@@ -10,6 +10,7 @@ import com.numenlabs.zerophonev2.ui.dashboard.DashboardScreen
 import com.numenlabs.zerophonev2.ui.provisioning.ProvisioningScreen
 import com.numenlabs.zerophonev2.ui.settings.AppPickerScreen
 import com.numenlabs.zerophonev2.ui.settings.ColorAppsScreen
+import com.numenlabs.zerophonev2.ui.settings.ProtectedAppsScreen
 import com.numenlabs.zerophonev2.ui.settings.SettingsScreen
 
 /** Manual navigation over three in-app screens (no nav library needed). */
@@ -30,6 +31,10 @@ sealed interface Screen {
 
     data object ColorApps : Screen {
         override val key: String = "color_apps"
+    }
+
+    data object ProtectedApps : Screen {
+        override val key: String = "protected_apps"
     }
 
     data object Provisioning : Screen {
@@ -56,11 +61,14 @@ fun AppNav() {
             SettingsScreen(
                 onOpenPicker = { currentName = Screen.Picker.key },
                 onOpenColorApps = { currentName = Screen.ColorApps.key },
+                onOpenProtected = { currentName = Screen.ProtectedApps.key },
             )
 
         Screen.Picker -> AppPickerScreen(onDone = { currentName = Screen.Settings.key })
 
         Screen.ColorApps -> ColorAppsScreen(onDone = { currentName = Screen.Settings.key })
+
+        Screen.ProtectedApps -> ProtectedAppsScreen(onDone = { currentName = Screen.Settings.key })
 
         Screen.Provisioning -> ProvisioningScreen()
     }
@@ -71,6 +79,7 @@ private fun screenOf(key: String): Screen =
         Screen.Settings.key -> Screen.Settings
         Screen.Picker.key -> Screen.Picker
         Screen.ColorApps.key -> Screen.ColorApps
+        Screen.ProtectedApps.key -> Screen.ProtectedApps
         Screen.Provisioning.key -> Screen.Provisioning
         else -> Screen.Dashboard
     }

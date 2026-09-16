@@ -45,6 +45,15 @@
         </activity>
 
         <activity
+            android:name=".gate.BiometricGateActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:theme="@style/Theme.ZeroPhoneV2.Gate"
+            android:turnScreenOn="true" />
+
+        <activity
             android:name=".gate.GateActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:excludeFromRecents="true"

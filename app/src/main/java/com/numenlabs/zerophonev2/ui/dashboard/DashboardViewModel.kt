@@ -32,6 +32,7 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
         val appState: AppState = AppState(),
         val provisioning: ProvisioningStatus? = null,
         val apps: List<DistractingApp> = emptyList(),
+        val protectedApps: List<DistractingApp> = emptyList(),
         val remainingGrantMillis: Long? = null,
     )
 
@@ -71,15 +72,20 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
                 val nowEffective = System.currentTimeMillis() + state.clockSkewMillis
                 grant.deadlineMillis - nowEffective
             }
+        fun resolve(pkg: String): DistractingApp =
+            labelsMap[pkg] ?: DistractingApp(pkg, state.appLabels[pkg] ?: pkg, null, false)
+
         return DashboardUiState(
             appState = state,
             provisioning = provisioning,
             apps =
                 state.distractingPackages
-                    .map { pkg ->
-                        labelsMap[pkg]
-                            ?: DistractingApp(pkg, state.appLabels[pkg] ?: pkg, null, false)
-                    }
+                    .map { pkg -> resolve(pkg) }
+                    .sortedBy { it.label.lowercase() }
+                    .map { it.copy(grantedNow = it.packageName == state.activeGrant?.packageName) },
+            protectedApps =
+                state.protectedPackages
+                    .map { pkg -> resolve(pkg) }
                     .sortedBy { it.label.lowercase() }
                     .map { it.copy(grantedNow = it.packageName == state.activeGrant?.packageName) },
             remainingGrantMillis = remaining?.takeIf { it > 0 },
@@ -97,7 +103,7 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
             try {
                 val state = app.container.repository.snapshot()
                 val seeded =
-                    state.distractingPackages.mapNotNull { pkg ->
+                    (state.distractingPackages + state.protectedPackages).mapNotNull { pkg ->
                         val label = state.appLabels[pkg] ?: return@mapNotNull null
                         com.numenlabs.zerophonev2.data.IconCache.load(app, pkg)?.let { icon ->
                             pkg to DistractingApp(pkg, label, icon, false)
@@ -120,7 +126,7 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
             // flashes raw package names / empty tiles while the query runs.
             try {
                 val state = app.container.repository.snapshot()
-                val wanted = state.distractingPackages
+                val wanted = state.distractingPackages + state.protectedPackages
                 if (wanted.isNotEmpty()) {
                     val fresh = catalog.filter { it.packageName in wanted }.map { it.packageName to it.label }
                     if (fresh.toMap() != state.appLabels.filterKeys { it in wanted }) {
@@ -158,6 +164,8 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
                     }
                 } catch (_: Exception) {
                 }
+            } else if (target.packageName in state.protectedPackages) {
+                com.numenlabs.zerophonev2.gate.BiometricGateActivity.start(app, target.packageName)
             } else {
                 com.numenlabs.zerophonev2.gate.GateActivity.start(app, target.packageName)
             }

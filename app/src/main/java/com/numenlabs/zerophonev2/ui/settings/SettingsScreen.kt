@@ -49,6 +49,7 @@ import kotlinx.coroutines.delay
 fun SettingsScreen(
     onOpenPicker: () -> Unit,
     onOpenColorApps: () -> Unit,
+    onOpenProtected: () -> Unit,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as ZeroPhoneApp
@@ -122,6 +123,9 @@ fun SettingsScreen(
             }
             OutlinedButton(onClick = onOpenColorApps, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.settings_color_apps, state.colorPackages.size))
+            }
+            OutlinedButton(onClick = onOpenProtected, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.settings_protected_apps, state.protectedPackages.size))
             }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
