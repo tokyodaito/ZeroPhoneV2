@@ -20,6 +20,7 @@
     <string name="dashboard_no_window">Нет активного окна доступа</string>
     <string name="dashboard_distacting_section">Отвлекающие приложения</string>
     <string name="dashboard_distacting_empty">Список пуст. Добавьте приложения в настройках.</string>
+    <string name="dashboard_distacting_hint">Нажмите на приложение — короткая проверка внимания, и вы внутри</string>
     <string name="dashboard_open_settings">Настройки</string>
     <string name="dashboard_open_provisioning">Установка</string>
 

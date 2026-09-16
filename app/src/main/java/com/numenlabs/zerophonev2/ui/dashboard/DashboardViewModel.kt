@@ -76,7 +76,10 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
             provisioning = provisioning,
             apps =
                 state.distractingPackages
-                    .map { pkg -> labelsMap[pkg] ?: DistractingApp(pkg, pkg, null, false) }
+                    .map { pkg ->
+                        labelsMap[pkg]
+                            ?: DistractingApp(pkg, state.appLabels[pkg] ?: pkg, null, false)
+                    }
                     .sortedBy { it.label.lowercase() }
                     .map { it.copy(grantedNow = it.packageName == state.activeGrant?.packageName) },
             remainingGrantMillis = remaining?.takeIf { it > 0 },
@@ -89,10 +92,24 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
 
     fun refreshApps() {
         viewModelScope.launch {
+            val catalog = AppCatalog.queryLaunchableApps(app)
             labels.value =
-                AppCatalog.queryLaunchableApps(app).associate { info ->
+                catalog.associate { info ->
                     info.packageName to DistractingApp(info.packageName, info.label, info.icon, false)
                 }
+            // Persist labels of distracting apps so a cold start never flashes
+            // raw package names while the catalog query is still running.
+            try {
+                val state = app.container.repository.snapshot()
+                val wanted = state.distractingPackages
+                if (wanted.isNotEmpty()) {
+                    val fresh = catalog.filter { it.packageName in wanted }.map { it.packageName to it.label }
+                    if (fresh.toMap() != state.appLabels.filterKeys { it in wanted }) {
+                        app.container.repository.update { it.copy(appLabels = fresh.toMap()) }
+                    }
+                }
+            } catch (_: Exception) {
+            }
         }
     }
 

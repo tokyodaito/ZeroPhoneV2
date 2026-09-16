@@ -157,6 +157,11 @@ fun DashboardScreen(
                     modifier = Modifier.padding(vertical = 24.dp),
                 )
             } else {
+                Text(
+                    stringResource(R.string.dashboard_distacting_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 AppIconGrid(
                     apps =
                         uiState.apps.map {
@@ -167,6 +172,7 @@ fun DashboardScreen(
                             .firstOrNull { it.packageName == appInfo.packageName }
                             ?.let { viewModel.onAppClicked(it) }
                     },
+                    activePackage = uiState.appState.activeGrant?.packageName,
                 )
             }
             Spacer(Modifier.height(24.dp))

@@ -10,6 +10,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AppState(
     val distractingPackages: Set<String> = emptySet(),
+    /** Cached labels of distracting apps: instant proper names on cold start. */
+    val appLabels: Map<String, String> = emptyMap(),
     /** Per-app switches for distracting apps (per-session unlock). */
     val perAppConfig: Map<String, PerAppConfig> = emptyMap(),
     /**
