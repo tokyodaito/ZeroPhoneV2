@@ -41,6 +41,21 @@ class GateViewModel(
     private val _faceOverlay = MutableStateFlow<FaceUiData?>(null)
     val faceOverlay: StateFlow<FaceUiData?> = _faceOverlay.asStateFlow()
 
+    /** Fill light: screen as a face light in the dark. Level 0.1..1.0. */
+    private val _lightOn = MutableStateFlow(false)
+    val lightOn: StateFlow<Boolean> = _lightOn.asStateFlow()
+
+    private val _lightLevel = MutableStateFlow(0.4f)
+    val lightLevel: StateFlow<Float> = _lightLevel.asStateFlow()
+
+    fun toggleLight() {
+        _lightOn.value = !_lightOn.value
+    }
+
+    fun setLightLevel(level: Float) {
+        _lightLevel.value = level.coerceIn(0.1f, 1f)
+    }
+
     private val _totalSeconds = MutableStateFlow(60)
     val totalSeconds: StateFlow<Int> = _totalSeconds.asStateFlow()
 

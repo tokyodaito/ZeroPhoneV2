@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -39,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -402,16 +405,35 @@ private fun GateContent(
     val state by viewModel.uiState.collectAsState()
     val totalSeconds by viewModel.totalSeconds.collectAsState()
     val faceOverlay by viewModel.faceOverlay.collectAsState()
+    val lightOn by viewModel.lightOn.collectAsState()
+    val lightLevel by viewModel.lightLevel.collectAsState()
     val context = LocalContext.current
 
-    Column(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
+    // Fill light also raises the window brightness proportionally; restore on dispose.
+    val window = (context as? android.app.Activity)?.window
+    DisposableEffect(lightOn, lightLevel) {
+        val initial = window?.attributes?.screenBrightness ?: -1f
+        if (lightOn && window != null) {
+            window.attributes =
+                window.attributes.also { it.screenBrightness = 0.35f + 0.65f * lightLevel }
+        }
+        onDispose {
+            if (lightOn && window != null) {
+                window.attributes = window.attributes.also { it.screenBrightness = initial }
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                    .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
         Text(
             text = stringResource(R.string.gate_title),
             style = MaterialTheme.typography.headlineMedium,
@@ -454,7 +476,33 @@ private fun GateContent(
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
+
+        // Fill light: screen becomes a soft face light for the dark.
+        Row(
+            modifier = Modifier.fillMaxWidth(0.8f),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.material3.OutlinedButton(onClick = viewModel::toggleLight) {
+                Text(
+                    stringResource(R.string.gate_fill_light) +
+                        if (lightOn) " ✓" else "",
+                )
+            }
+            if (lightOn) {
+                androidx.compose.material3.Slider(
+                    value = lightLevel,
+                    onValueChange = viewModel::setLightLevel,
+                    valueRange = 0.1f..1f,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp),
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
 
         Box(contentAlignment = Alignment.Center) {
             CountdownRing(
@@ -516,5 +564,17 @@ private fun GateContent(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 24.dp),
         )
+        }
+
+        // The light itself: a milky veil OVER everything (touch-transparent) —
+        // capped at 0.65 alpha so the preview and buttons stay visible.
+        if (lightOn) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = lightLevel * 0.65f)),
+            )
+        }
     }
 }
