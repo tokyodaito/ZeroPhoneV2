@@ -36,6 +36,7 @@ class ZeroPhoneApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        installBenignCameraTeardownGuard()
         androidx.core.content.ContextCompat.registerReceiver(
             this,
             clockReceiver,
@@ -54,6 +55,38 @@ class ZeroPhoneApp : Application() {
         }
     }
 
+    /**
+     * Samsung OneUI camera2 teardown race (seen on the M33): after GateActivity
+     * unbinds the front camera, the camera service may asynchronously fail a
+     * post-close stream operation with SecurityException "Attempt to use camera
+     * from a different process than original client" on a camera2 internal
+     * thread. It escapes every try/catch we own and is fatal for the process —
+     * killing the enforcement observers with it. The camera is already closed
+     * at that point, so the error is benign: suppress exactly that one and
+     * keep running; anything else still crashes normally.
+     */
+    private fun installBenignCameraTeardownGuard() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            var cause: Throwable? = throwable
+            var benignCameraTeardown = false
+            while (cause != null) {
+                if (cause is SecurityException &&
+                    cause.message?.contains("camera", ignoreCase = true) == true
+                ) {
+                    benignCameraTeardown = true
+                    break
+                }
+                cause = cause.cause
+            }
+            if (benignCameraTeardown) {
+                android.util.Log.e(TAG, "Suppressed benign camera teardown error", throwable)
+            } else {
+                previous?.uncaughtException(thread, throwable)
+            }
+        }
+    }
+
     /** 500 ms debounce — clock edits arrive as bursts of broadcasts (V1). */
     private fun scheduleClockReconcile() {
         clockReconcileRunnable?.let { handler.removeCallbacks(it) }
@@ -67,5 +100,9 @@ class ZeroPhoneApp : Application() {
                     }
                 }
             }.also { handler.postDelayed(it, 500L) }
+    }
+
+    private companion object {
+        const val TAG = "ZeroPhoneV2"
     }
 }
