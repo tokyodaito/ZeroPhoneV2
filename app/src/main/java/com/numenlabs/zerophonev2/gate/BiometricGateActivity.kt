@@ -18,10 +18,12 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,9 +36,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,7 +49,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +72,7 @@ import com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.max
 
 /**
  * Entry gate for PROTECTED apps (e.g. banking): system biometrics first
@@ -79,6 +89,8 @@ class BiometricGateActivity : FragmentActivity() {
     private val faceOverlayState = mutableStateOf<FaceUiData?>(null)
     private val attendedMillisState = mutableStateOf(0L)
     private val appNameState = mutableStateOf("")
+    private val lightOnState = mutableStateOf(false)
+    private val lightLevelState = mutableStateOf(0.6f)
 
     private var targetPackage: String? = null
     private var promptShown = false
@@ -291,64 +303,133 @@ class BiometricGateActivity : FragmentActivity() {
         val faceOverlay by faceOverlayState
         val attended by attendedMillisState
         val appName by appNameState
+        val lightOn by lightOnState
+        val lightLevel by lightLevelState
 
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                    .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text(
-                text = stringResource(R.string.biogate_title),
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
-            )
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
-            )
-            if (phase == Phase.Biometric) {
-                Text(
-                    text = stringResource(R.string.biogate_wait_prompt),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                )
-            } else {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth(0.55f)
-                            .aspectRatio(3f / 4f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Color(0xFF101010)),
-                ) {
-                    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-                    FaceOverlayCanvas(
-                        data = faceOverlay,
-                        status =
-                            if (attended > 0) FaceOverlayStatus.ATTENTION else FaceOverlayStatus.NO_FACE,
-                        modifier = Modifier.fillMaxSize(),
+        // Fill light also raises the window brightness proportionally; restore on dispose.
+        val window = this.window
+        DisposableEffect(lightOn, lightLevel) {
+            val initial = window?.attributes?.screenBrightness ?: -1f
+            if (lightOn && window != null) {
+                window.attributes =
+                    window.attributes.also { it.screenBrightness = 0.35f + 0.65f * lightLevel }
+            }
+            onDispose {
+                if (lightOn && window != null) {
+                    window.attributes = window.attributes.also { it.screenBrightness = initial }
+                }
+            }
+        }
+
+        var previewRect by remember { mutableStateOf<Rect?>(null) }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            // The fill light: a soft glow AROUND the camera preview (same as the
+            // main gate) so the face is visible in the dark.
+            if (lightOn) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val rect = previewRect ?: return@Canvas
+                    val center = rect.center
+                    val radius = max(size.width, size.height) * 0.95f
+                    drawCircle(
+                        brush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color.White.copy(alpha = lightLevel * 0.85f),
+                                        Color.Transparent,
+                                    ),
+                                center = center,
+                                radius = radius,
+                            ),
+                        radius = radius,
+                        center = center,
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                val secondsLeft = ((FACE_CHECK_MILLIS - attended) / 1000).coerceAtLeast(0)
-                Text(
-                    text = stringResource(R.string.biogate_face_progress, secondsLeft),
-                    color = Color.White,
-                    fontSize = 20.sp,
-                )
             }
-            Spacer(Modifier.height(24.dp))
-            OutlinedButton(
-                onClick = { finish() },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.gate_not_now)) }
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.biogate_title),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                )
+                Text(
+                    text = appName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
+                )
+                if (phase == Phase.Biometric) {
+                    Text(
+                        text = stringResource(R.string.biogate_wait_prompt),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                    )
+                } else {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(0.55f)
+                                .aspectRatio(3f / 4f)
+                                .onGloballyPositioned { previewRect = it.boundsInRoot() }
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color(0xFF101010)),
+                    ) {
+                        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                        FaceOverlayCanvas(
+                            data = faceOverlay,
+                            status =
+                                if (attended > 0) FaceOverlayStatus.ATTENTION else FaceOverlayStatus.NO_FACE,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    val secondsLeft = ((FACE_CHECK_MILLIS - attended) / 1000).coerceAtLeast(0)
+                    Text(
+                        text = stringResource(R.string.biogate_face_progress, secondsLeft),
+                        color = Color.White,
+                        fontSize = 20.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(0.85f),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedButton(onClick = { lightOnState.value = !lightOnState.value }) {
+                            Text(
+                                stringResource(R.string.gate_fill_light) +
+                                    if (lightOn) " ✓" else "",
+                            )
+                        }
+                        if (lightOn) {
+                            Slider(
+                                value = lightLevel,
+                                onValueChange = { lightLevelState.value = it },
+                                valueRange = 0.1f..1f,
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .padding(start = 12.dp),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+                OutlinedButton(
+                    onClick = { finish() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.gate_not_now)) }
+            }
         }
     }
 
