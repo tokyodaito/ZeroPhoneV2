@@ -133,7 +133,14 @@ class GateViewModel(
     fun startCountdown() {
         if (_countdownStarted.value) return
         _countdownStarted.value = true
-        send(GateEvent.Start(SystemClock.elapsedRealtime()))
+        val now = SystemClock.elapsedRealtime()
+        send(GateEvent.Start(now))
+        // The face was likely already confirmed DURING the preview — the hysteresis
+        // only emits on transitions, so its FacePresent went to the Idle FSM and
+        // was dropped. Re-sync: without this the countdown never starts counting.
+        if (attention.isPresent) {
+            send(GateEvent.FacePresent(now))
+        }
         startTicker()
     }
 
