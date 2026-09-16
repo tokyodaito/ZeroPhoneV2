@@ -67,9 +67,11 @@ class GateViewModel(
     private val attention = AttentionPolicy()
     private var tickerJob: Job? = null
 
+    /** Manual start: the user first checks themselves in the preview, then presses «Запускаем». */
+    private val _countdownStarted = MutableStateFlow(false)
+    val countdownStarted: StateFlow<Boolean> = _countdownStarted.asStateFlow()
+
     init {
-        send(GateEvent.Start(SystemClock.elapsedRealtime()))
-        startTicker()
         viewModelScope.launch {
             // Display-only: the FSM is built with the default 60 s. A custom
             // gateDurationMillis would need loading BEFORE Start (DataStore read
@@ -126,6 +128,14 @@ class GateViewModel(
     fun focusLost() = send(GateEvent.FocusLost(SystemClock.elapsedRealtime()))
 
     fun screenOff() = send(GateEvent.ScreenOff(SystemClock.elapsedRealtime()))
+
+    /** «Запускаем»: begin the 60-second countdown (after the self-check preview). */
+    fun startCountdown() {
+        if (_countdownStarted.value) return
+        _countdownStarted.value = true
+        send(GateEvent.Start(SystemClock.elapsedRealtime()))
+        startTicker()
+    }
 
     /** «Попробовать снова» — fresh pass from zero. */
     fun retry() {

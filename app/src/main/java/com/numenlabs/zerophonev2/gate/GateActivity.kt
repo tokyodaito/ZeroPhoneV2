@@ -34,6 +34,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.max
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -407,6 +426,7 @@ private fun GateContent(
     val faceOverlay by viewModel.faceOverlay.collectAsState()
     val lightOn by viewModel.lightOn.collectAsState()
     val lightLevel by viewModel.lightLevel.collectAsState()
+    val countdownStarted by viewModel.countdownStarted.collectAsState()
     val context = LocalContext.current
 
     // Fill light also raises the window brightness proportionally; restore on dispose.
@@ -424,157 +444,267 @@ private fun GateContent(
         }
     }
 
+    // The departing-light animation: camera fades out while its outline flies
+    // apart toward the screen edges; the countdown layout appears afterwards.
+    val fly = remember { Animatable(0f) }
+    var showCountdown by remember { mutableStateOf(false) }
+    LaunchedEffect(countdownStarted) {
+        if (countdownStarted && fly.value < 1f) {
+            fly.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
+            showCountdown = true
+        }
+    }
+
+    var cameraRect by remember { mutableStateOf<Rect?>(null) }
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(androidx.compose.foundation.rememberScrollState())
-                    .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-        Text(
-            text = stringResource(R.string.gate_title),
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
-        )
-        Text(
-            text = stringResource(R.string.gate_subtitle, totalSeconds),
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
-        )
-
-        // Live front-camera feed with the face "графы" colored by attention status.
-        val current = state
-        val overlayStatus =
-            when {
-                current is GateState.Stopped -> com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.NO_FACE
-                current is GateState.Watching && current.attentionHeld ->
-                    com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.ATTENTION
-
-                faceOverlay?.faceFound == true ->
-                    com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.WARMING_UP
-
-                else -> com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.NO_FACE
-            }
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth(0.55f)
-                    .aspectRatio(3f / 4f)
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                    .background(Color(0xFF101010)),
-        ) {
-            androidx.compose.ui.viewinterop.AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-            com.numenlabs.zerophonev2.ui.components.FaceOverlayCanvas(
-                data = faceOverlay,
-                status = overlayStatus,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // Fill light: screen becomes a soft face light for the dark.
-        Row(
-            modifier = Modifier.fillMaxWidth(0.8f),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            androidx.compose.material3.OutlinedButton(onClick = viewModel::toggleLight) {
-                Text(
-                    stringResource(R.string.gate_fill_light) +
-                        if (lightOn) " ✓" else "",
-                )
-            }
-            if (lightOn) {
-                androidx.compose.material3.Slider(
-                    value = lightLevel,
-                    onValueChange = viewModel::setLightLevel,
-                    valueRange = 0.1f..1f,
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .padding(start = 12.dp),
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Box(contentAlignment = Alignment.Center) {
-            CountdownRing(
-                progress =
-                    when (val s = state) {
-                        is GateState.Watching -> s.heldMillis / (totalSeconds * 1000f)
-                        else -> 0f
-                    },
-                modifier = Modifier.fillMaxWidth(0.5f),
-            )
-            val centerText =
-                when (val s = state) {
-                    is GateState.Watching -> stringResource(R.string.gate_remaining_seconds, (totalSeconds - s.heldMillis / 1000).toInt())
-                    else -> stringResource(R.string.gate_remaining_seconds, totalSeconds)
+        // Soft glow AROUND the camera, fading toward the screen edges; during the
+        // launch it dissolves while its outline expands outward ("улетает в края").
+        val rect = cameraRect
+        if (rect != null) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val p = fly.value
+                val glowAlpha = (if (lightOn) lightLevel * 0.85f else 0f) * (1f - p)
+                if (glowAlpha > 0.015f) {
+                    val center = rect.center
+                    val radius = max(size.width, size.height) * 0.95f
+                    drawCircle(
+                        brush =
+                            Brush.radialGradient(
+                                colors = listOf(Color.White.copy(alpha = glowAlpha), Color.Transparent),
+                                center = center,
+                                radius = radius,
+                            ),
+                        radius = radius,
+                        center = center,
+                    )
                 }
-            Text(text = centerText, color = Color.White, fontSize = 30.sp)
-        }
-
-        val (messageRes, showRetry) =
-            when (val s = state) {
-                is GateState.Watching ->
-                    if (s.attentionHeld) R.string.gate_keep_watching to false else R.string.gate_wait_face to false
-
-                is GateState.Stopped ->
-                    when (s.reason) {
-                        GateStopReason.FACE_LOST -> R.string.gate_stopped_face to true
-                        GateStopReason.FOCUS_LOST -> R.string.gate_stopped_focus to true
-                        GateStopReason.SCREEN_OFF -> R.string.gate_stopped_screen to true
-                        // Retry is valid here too: if the permission was granted via
-                        // settings in the meantime, onStart has already rebound the camera.
-                        GateStopReason.CAMERA_ERROR -> R.string.gate_stopped_camera_error to true
-                    }
-
-                GateState.Completed -> R.string.gate_completed to false
-                else -> R.string.gate_wait_face to false
-            }
-        Text(
-            text = stringResource(messageRes),
-            color = if (state is GateState.Stopped) MaterialTheme.colorScheme.error else Color.Gray,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 24.dp, bottom = 16.dp),
-        )
-
-        if (showRetry) {
-            Button(onClick = viewModel::retry, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.gate_retry))
+                if (p > 0f && p < 1f) {
+                    val w = rect.width * (1f + 7f * p)
+                    val h = rect.height * (1f + 7f * p)
+                    val c = rect.center
+                    drawRoundRect(
+                        color = Color.White.copy(alpha = (1f - p) * 0.9f),
+                        topLeft = Offset(c.x - w / 2f, c.y - h / 2f),
+                        size = Size(w, h),
+                        cornerRadius = CornerRadius(48f, 48f),
+                        style = Stroke(width = 4f + 8f * (1f - p)),
+                    )
+                }
             }
         }
-        if (state is GateState.Stopped && (state as GateState.Stopped).reason == GateStopReason.CAMERA_ERROR) {
-            TextButton(onClick = onOpenAppSettings) { Text(stringResource(R.string.gate_open_settings)) }
-        }
-        OutlinedButton(onClick = viewModel::abandon, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Text(stringResource(R.string.gate_not_now))
-        }
-        Text(
-            text = stringResource(R.string.gate_camera_privacy),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.DarkGray,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 24.dp),
-        )
-        }
 
-        // The light itself: a milky veil OVER everything (touch-transparent) —
-        // capped at 0.65 alpha so the preview and buttons stay visible.
-        if (lightOn) {
-            Box(
+        if (!showCountdown) {
+            // ---- Phase 1: self-check preview ----
+            Column(
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .background(Color.White.copy(alpha = lightLevel * 0.65f)),
-            )
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.gate_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                )
+                Text(
+                    text = stringResource(R.string.gate_subtitle, totalSeconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                )
+
+                val current = state
+                val overlayStatus =
+                    when {
+                        current is GateState.Watching && current.attentionHeld ->
+                            com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.ATTENTION
+
+                        faceOverlay?.faceFound == true ->
+                            com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.WARMING_UP
+
+                        else -> com.numenlabs.zerophonev2.ui.components.FaceOverlayStatus.NO_FACE
+                    }
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(0.55f)
+                            .aspectRatio(3f / 4f)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                            .background(Color(0xFF101010))
+                            .onGloballyPositioned { cameraRect = it.boundsInRoot() }
+                            .graphicsLayer {
+                                alpha = 1f - fly.value
+                                scaleX = 1f - 0.1f * fly.value
+                                scaleY = 1f - 0.1f * fly.value
+                            },
+                ) {
+                    androidx.compose.ui.viewinterop.AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                    com.numenlabs.zerophonev2.ui.components.FaceOverlayCanvas(
+                        data = faceOverlay,
+                        status = overlayStatus,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(0.85f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(onClick = viewModel::toggleLight) {
+                        Text(
+                            stringResource(R.string.gate_fill_light) +
+                                if (lightOn) " ✓" else "",
+                        )
+                    }
+                    if (lightOn) {
+                        Slider(
+                            value = lightLevel,
+                            onValueChange = viewModel::setLightLevel,
+                            valueRange = 0.1f..1f,
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .padding(start = 12.dp),
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                val hint =
+                    when {
+                        faceOverlay == null -> stringResource(R.string.gate_wait_face)
+                        faceOverlay?.faceFound == true -> stringResource(R.string.gate_preview_ok)
+                        else -> stringResource(R.string.gate_wait_face)
+                    }
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+
+                Button(
+                    onClick = viewModel::startCountdown,
+                    enabled = !countdownStarted,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.gate_start_button))
+                }
+                OutlinedButton(
+                    onClick = viewModel::abandon,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                ) {
+                    Text(stringResource(R.string.gate_not_now))
+                }
+                Text(
+                    text = stringResource(R.string.gate_camera_privacy),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.DarkGray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+        } else {
+            // ---- Phase 2: the countdown (camera hidden, detection keeps running) ----
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                        .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.gate_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = Color.White,
+                )
+                Text(
+                    text = stringResource(R.string.gate_subtitle, totalSeconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+                )
+
+                Box(contentAlignment = Alignment.Center) {
+                    CountdownRing(
+                        progress =
+                            when (val s = state) {
+                                is GateState.Watching -> s.heldMillis / (totalSeconds * 1000f)
+                                else -> 0f
+                            },
+                        modifier = Modifier.fillMaxWidth(0.6f),
+                    )
+                    val centerText =
+                        when (val s = state) {
+                            is GateState.Watching -> stringResource(R.string.gate_remaining_seconds, (totalSeconds - s.heldMillis / 1000).toInt())
+                            else -> stringResource(R.string.gate_remaining_seconds, totalSeconds)
+                        }
+                    Text(text = centerText, color = Color.White, fontSize = 40.sp)
+                }
+
+                val (messageRes, showRetry) =
+                    when (val s = state) {
+                        is GateState.Watching ->
+                            if (s.attentionHeld) R.string.gate_keep_watching to false else R.string.gate_wait_face to false
+
+                        is GateState.Stopped ->
+                            when (s.reason) {
+                                GateStopReason.FACE_LOST -> R.string.gate_stopped_face to true
+                                GateStopReason.FOCUS_LOST -> R.string.gate_stopped_focus to true
+                                GateStopReason.SCREEN_OFF -> R.string.gate_stopped_screen to true
+                                GateStopReason.CAMERA_ERROR -> R.string.gate_stopped_camera_error to true
+                            }
+
+                        GateState.Completed -> R.string.gate_completed to false
+                        else -> R.string.gate_wait_face to false
+                    }
+                Text(
+                    text = stringResource(messageRes),
+                    color = if (state is GateState.Stopped) MaterialTheme.colorScheme.error else Color.Gray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 24.dp, bottom = 16.dp),
+                )
+
+                if (showRetry) {
+                    Button(onClick = viewModel::retry, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.gate_retry))
+                    }
+                }
+                if (state is GateState.Stopped && (state as GateState.Stopped).reason == GateStopReason.CAMERA_ERROR) {
+                    TextButton(onClick = onOpenAppSettings) { Text(stringResource(R.string.gate_open_settings)) }
+                }
+                OutlinedButton(
+                    onClick = viewModel::abandon,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                ) {
+                    Text(stringResource(R.string.gate_not_now))
+                }
+                Text(
+                    text = stringResource(R.string.gate_camera_privacy),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.DarkGray,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
         }
     }
 }
