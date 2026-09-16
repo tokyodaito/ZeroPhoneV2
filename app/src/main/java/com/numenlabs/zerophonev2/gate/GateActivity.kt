@@ -458,11 +458,10 @@ private fun GateContent(
     var cameraRect by remember { mutableStateOf<Rect?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // The light itself. Phase 1: a soft glow AROUND the camera preview,
-        // fading toward the screen edges. On «Запускаем» the outline flies apart
-        // toward the edges while the glow MORPHS into a dim ambient light in the
-        // screen center — the face must stay illuminated for detection, so the
-        // light never fully disappears.
+        // The light itself. Phase 1: a soft glow AROUND the camera preview.
+        // On «Запускаем» the glow FLOWS outward: the outline flies apart toward
+        // the borders while the light settles into an edge-hugging frame that
+        // STAYS for the whole countdown — the face remains illuminated.
         val rect = cameraRect
         if (lightOn) {
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -483,20 +482,27 @@ private fun GateContent(
                         center = center,
                     )
                 }
-                // Ambient (phase 2) — fades in behind the countdown ring.
-                val ambientAlpha = lightLevel * 0.7f * p
-                if (ambientAlpha > 0.015f) {
+                // Edge light (phase 2) — the glow FLOWS to the screen borders and
+                // settles there as a soft frame: the face stays illuminated while
+                // the center (where the user looks) stays dark. Reverse radial:
+                // transparent core, white rim.
+                val edgeAlpha = lightLevel * 0.9f * p
+                if (edgeAlpha > 0.015f) {
                     val center = Offset(size.width / 2f, size.height / 2f)
-                    val radius = max(size.width, size.height) * 0.8f
-                    drawCircle(
+                    val radius = max(size.width, size.height) * 0.62f
+                    drawRect(
                         brush =
                             Brush.radialGradient(
-                                colors = listOf(Color.White.copy(alpha = ambientAlpha), Color.Transparent),
+                                colorStops =
+                                    arrayOf(
+                                        0.0f to Color.Transparent,
+                                        0.45f to Color.Transparent,
+                                        1.0f to Color.White.copy(alpha = edgeAlpha),
+                                    ),
                                 center = center,
                                 radius = radius,
                             ),
-                        radius = radius,
-                        center = center,
+                        size = size,
                     )
                 }
                 // The departing outline ("обводка") of the camera box.
