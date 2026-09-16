@@ -66,6 +66,7 @@ class EnforcementService : Service() {
     private fun startForegroundWatcher(app: com.numenlabs.zerophonev2.ZeroPhoneApp) {
         serviceScope.launch {
             var lastSeen: String? = null
+            var stableCount = 0
             var announced = false
             while (isActive) {
                 val state =
@@ -100,7 +101,16 @@ class EnforcementService : Service() {
                     val pkg = ForegroundWatcher.lastForegroundPackage(this@EnforcementService)
                     if (pkg != lastSeen) {
                         lastSeen = pkg
+                        stableCount = 1
                         app.container.engine.onForegroundChanged(pkg)
+                    } else if (pkg != null) {
+                        stableCount++
+                        // Require 2 consecutive identical reads (~2 s): activity
+                        // transitions briefly flash the launcher, and that flicker
+                        // must not end a per-session window.
+                        if (stableCount == STABLE_POLLS_REQUIRED) {
+                            app.container.engine.onForegroundStable(pkg)
+                        }
                     }
                 }
                 if (mediaHoldNeeded) {
@@ -163,6 +173,7 @@ class EnforcementService : Service() {
         private const val SELF_CHECK_INTERVAL_MILLIS = 60_000L
         private const val WATCHER_ACTIVE_INTERVAL_MILLIS = 1_000L
         private const val WATCHER_IDLE_INTERVAL_MILLIS = 5_000L
+        private const val STABLE_POLLS_REQUIRED = 2
 
         @Volatile
         var isRunning: Boolean = false

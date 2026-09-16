@@ -95,37 +95,48 @@ class EnforcementEngine(
     var foregroundPackage: String? = null
         private set
 
-    /** Called by the watcher when the foreground package CHANGES. */
+    /** Called by the watcher on every foreground CHANGE (color switches — no debounce needed). */
     fun onForegroundChanged(pkg: String?) {
         foregroundPackage = pkg
         scope.launch {
             try {
-                handleForegroundChanged(pkg)
+                applyGrayscaleTarget(repository.snapshot(), pkg)
             } catch (_: Exception) {
             }
         }
     }
 
-    private suspend fun handleForegroundChanged(pkg: String?) {
-        val state = repository.snapshot()
-        // 1) Grayscale target may flip (entering/leaving a per-app color window).
-        applyGrayscaleTarget(state, pkg)
-        // 2) A per-session grant ends the moment its app is no longer in front.
-        val grant = state.activeGrant
-        if (grant != null && grant.perSession && pkg != null && pkg != grant.packageName) {
-            mutex.withLock {
-                val fresh = repository.snapshot()
-                val active = fresh.activeGrant
-                if (active != null && active.perSession && pkg != active.packageName) {
-                    suspension.setPackagesSuspendedSafely(setOf(active.packageName), suspended = true)
-                    repository.update {
-                        it.copy(
-                            activeGrant = null,
-                            lastSuspended = it.lastSuspended + active.packageName,
-                        )
+    /**
+     * Called by the watcher only for a STABLE foreground (same package on 2+
+     * consecutive polls). Activity transitions briefly flash the launcher;
+     * only a genuinely settled foreign app may end a per-session window. A
+     * short grace period after the window opened protects the launch itself.
+     */
+    fun onForegroundStable(pkg: String?) {
+        scope.launch {
+            try {
+                val state = repository.snapshot()
+                val grant = state.activeGrant ?: return@launch
+                if (!grant.perSession) return@launch
+                if (pkg == null || pkg == grant.packageName) return@launch
+                if (effectiveNowMillis(state) - grant.openedAtMillis < GRACE_AFTER_OPEN_MILLIS) return@launch
+                mutex.withLock {
+                    val fresh = repository.snapshot()
+                    val active = fresh.activeGrant
+                    if (active != null && active.perSession && pkg != active.packageName &&
+                        effectiveNowMillis(fresh) - active.openedAtMillis >= GRACE_AFTER_OPEN_MILLIS
+                    ) {
+                        suspension.setPackagesSuspendedSafely(setOf(active.packageName), suspended = true)
+                        repository.update {
+                            it.copy(
+                                activeGrant = null,
+                                lastSuspended = it.lastSuspended + active.packageName,
+                            )
+                        }
+                        GrantAlarmScheduler.cancel(appContext)
                     }
-                    GrantAlarmScheduler.cancel(appContext)
                 }
+            } catch (_: Exception) {
             }
         }
     }
@@ -445,6 +456,9 @@ class EnforcementEngine(
 
     private companion object {
         const val SUPPORT_MESSAGE = "ZeroPhone: откройте приложение ZeroPhone, чтобы войти"
+
+        /** A fresh window must not be closed by launch-transition foreground flicker. */
+        const val GRACE_AFTER_OPEN_MILLIS = 5_000L
     }
 }
 

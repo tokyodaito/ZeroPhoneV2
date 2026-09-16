@@ -19,8 +19,10 @@ enum class FaceOverlayStatus { ATTENTION, WARMING_UP, NO_FACE }
  * contour, plus the bounding box. Green = attention held (timer running),
  * yellow = face detected but not confirmed yet, red = no face / gate stopped.
  *
- * Coordinates: analysis points are rotated to upright, mirrored (front
- * camera) and center-crop-scaled — matching PreviewView's FILL_CENTER.
+ * Coordinates: ML Kit reports face geometry in the ALREADY-ROTATED (upright)
+ * frame — do NOT rotate points again, only mirror (front-camera preview is
+ * mirrored, analysis is not) and center-crop-scale to PreviewView's
+ * FILL_CENTER.
  */
 @Composable
 fun FaceOverlayCanvas(
@@ -47,18 +49,10 @@ fun FaceOverlayCanvas(
             x: Float,
             y: Float,
         ): Offset {
-            // 1) Rotate the image point to upright space (clockwise).
-            val (rx, ry) =
-                when (d.rotationDegrees) {
-                    90 -> (d.imageHeight - y) to x
-                    180 -> (d.imageWidth - x) to (d.imageHeight - y)
-                    270 -> y to (d.imageWidth - x)
-                    else -> x to y
-                }
-            // 2) Mirror horizontally: the front preview is mirrored, analysis is not.
-            val mx = uprightW - rx
-            // 3) Center-crop scale onto the canvas.
-            return Offset(mx * scale + dx, ry * scale + dy)
+            // Mirror horizontally: the front preview is mirrored, analysis is not.
+            val mx = uprightW - x
+            // Center-crop scale onto the canvas.
+            return Offset(mx * scale + dx, y * scale + dy)
         }
 
         d.contours.forEach { contour ->

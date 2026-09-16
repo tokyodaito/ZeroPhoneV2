@@ -153,8 +153,21 @@ class GateActivity : ComponentActivity() {
         // Abandoning must destroy the gate — a terminal singleTask instance
         // would otherwise linger invisible with the camera still bound.
         lifecycleScope.launch {
+            var previous: GateState = GateState.Idle
             viewModel!!.uiState.collect { state ->
                 if (state is GateState.Abandoned) finish()
+                // «Попробовать снова» after a camera failure must also RETRY the
+                // camera itself, not just the countdown (binding happens in onStart).
+                if (previous is GateState.Stopped &&
+                    (previous as GateState.Stopped).reason == GateStopReason.CAMERA_ERROR &&
+                    state is GateState.Watching &&
+                    faceAnalyzer == null &&
+                    ContextCompat.checkSelfPermission(this@GateActivity, Manifest.permission.CAMERA) ==
+                        PackageManager.PERMISSION_GRANTED
+                ) {
+                    bindCamera()
+                }
+                previous = state
             }
         }
 
@@ -409,7 +422,7 @@ private fun GateContent(
             style = MaterialTheme.typography.bodyMedium,
             color = Color.Gray,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
 
         // Live front-camera feed with the face "графы" colored by attention status.
@@ -428,7 +441,7 @@ private fun GateContent(
         Box(
             modifier =
                 Modifier
-                    .fillMaxWidth(0.72f)
+                    .fillMaxWidth(0.55f)
                     .aspectRatio(3f / 4f)
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                     .background(Color(0xFF101010)),
@@ -441,7 +454,7 @@ private fun GateContent(
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
         Box(contentAlignment = Alignment.Center) {
             CountdownRing(
@@ -450,14 +463,14 @@ private fun GateContent(
                         is GateState.Watching -> s.heldMillis / (totalSeconds * 1000f)
                         else -> 0f
                     },
-                modifier = Modifier.fillMaxWidth(0.72f),
+                modifier = Modifier.fillMaxWidth(0.5f),
             )
             val centerText =
                 when (val s = state) {
                     is GateState.Watching -> stringResource(R.string.gate_remaining_seconds, (totalSeconds - s.heldMillis / 1000).toInt())
                     else -> stringResource(R.string.gate_remaining_seconds, totalSeconds)
                 }
-            Text(text = centerText, color = Color.White, fontSize = 34.sp)
+            Text(text = centerText, color = Color.White, fontSize = 30.sp)
         }
 
         val (messageRes, showRetry) =
@@ -482,7 +495,7 @@ private fun GateContent(
             text = stringResource(messageRes),
             color = if (state is GateState.Stopped) MaterialTheme.colorScheme.error else Color.Gray,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 32.dp, bottom = 24.dp),
+            modifier = Modifier.padding(top = 24.dp, bottom = 16.dp),
         )
 
         if (showRetry) {
