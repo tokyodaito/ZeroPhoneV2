@@ -138,12 +138,13 @@ class GateStateMachineTest {
     }
 
     @Test
-    fun `idle ignores everything but start`() {
+    fun `idle ignores everything but start and abandon`() {
         val m = machine()
         m.onEvent(GateEvent.Tick(1))
         m.onEvent(GateEvent.FacePresent(2))
-        m.onEvent(GateEvent.Abandon)
         assertEquals(GateState.Idle, m.state)
-        assertTrue(m.state === GateState.Idle)
+        // Abandon works BEFORE the countdown starts (preview phase).
+        m.onEvent(GateEvent.Abandon)
+        assertEquals(GateState.Abandoned, m.state)
     }
 }

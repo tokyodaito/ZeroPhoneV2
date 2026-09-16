@@ -75,6 +75,9 @@ class GateStateMachine(private val durationMillis: Long) {
                 GateState.Watching(heldMillis = 0L, attentionHeld = false)
             }
 
+            // Leaving before the countdown even started (preview phase) — allowed.
+            is GateEvent.Abandon -> GateState.Abandoned
+
             else -> state
         }
 
