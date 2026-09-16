@@ -1,0 +1,127 @@
+<resources>
+    <string name="app_name">ZeroPhone</string>
+
+    <!-- Device admin -->
+    <string name="device_admin_label">ZeroPhone</string>
+    <string name="device_admin_description">Контроль отвлекающих приложений, grayscale и DNS</string>
+    <string name="admin_support_message_short">ZeroPhone: откройте приложение ZeroPhone, чтобы войти</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">ZeroPhone</string>
+    <string name="dashboard_wss_missing_banner">Выдайте WRITE_SECURE_SETTINGS — иначе grayscale не работает. Экран «Установка» → шаг 2.</string>
+    <string name="status_device_owner">Владелец устройства</string>
+    <string name="status_write_secure_settings">Право WRITE_SECURE_SETTINGS</string>
+    <string name="status_grayscale">Grayscale</string>
+    <string name="status_dns">DNS (%1$s)</string>
+    <string name="status_exact_alarms">Точные будильники</string>
+    <string name="status_on">вкл</string>
+    <string name="status_off">выкл</string>
+    <string name="dashboard_active_window">Окно доступа: %1$s — осталось %2$s</string>
+    <string name="dashboard_no_window">Нет активного окна доступа</string>
+    <string name="dashboard_distacting_section">Отвлекающие приложения</string>
+    <string name="dashboard_distacting_empty">Список пуст. Добавьте приложения в настройках.</string>
+    <string name="dashboard_open_settings">Настройки</string>
+    <string name="dashboard_open_provisioning">Установка</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_distracting_header">Отвлекающие приложения (%1$d)</string>
+    <string name="settings_distracting_hint">Эти приложения приостановлены системой. Вход — только через 60-секундную проверку внимания.</string>
+    <string name="settings_pick_apps">Выбрать приложения</string>
+    <string name="settings_color_apps">Цветные приложения (%1$d)</string>
+
+    <!-- Color apps -->
+    <string name="color_apps_title">Цветные приложения</string>
+    <string name="color_apps_hint">В этих приложениях экран становится цветным, пока они открыты (grayscale временно выключается). Они не блокируются и не проходят проверку — например, Anki. Список фиксируется после «Сохранить и заблокировать настройки».</string>
+    <string name="color_apps_selected">Выбрано: %1$d</string>
+    <string name="color_apps_locked">🔒 Список зафиксирован блокировкой — изменить нельзя.</string>
+    <string name="settings_grayscale_header">Grayscale</string>
+    <string name="settings_grayscale_hint">Чёрно-белый экран всего телефона. Отменить из системных настроек нельзя — приложение возвращает режим автоматически.</string>
+    <string name="settings_grayscale_locked_hint">Чёрно-белый экран всего телефона. Включён; отключение на телефоне недоступно.</string>
+    <string name="settings_dns_header">DNS (Private DNS / DNS-over-TLS)</string>
+    <string name="settings_dns_host_hint">хост, например 12345.dns.nextdns.io</string>
+    <string name="settings_dns_hint">Строгий режим: если хост недоступен или порт 853 закрыт сетью — интернет по именам перестанет работать. Отмена — только из этого приложения.</string>
+    <string name="settings_dns_apply">Проверить и применить</string>
+    <string name="settings_dns_last_error">Последняя ошибка: %1$s</string>
+    <string name="settings_dns_applied_ok">Применён и заблокирован в Настройках</string>
+    <string name="settings_dns_turn_off">Выключить (вернуть «Автоматически»)</string>
+    <string name="settings_locked_banner">🔒 Настройки заблокированы. Отключить защиту на телефоне нельзя — только с компьютера через ADB (инструкция ниже).</string>
+    <string name="settings_lock_header">Завершение настройки</string>
+    <string name="settings_lock_hint">«Сохранить и заблокировать»: после этого grayscale, DNS и блокировку приложений нельзя будет отключить на самом телефоне. Единственный путь отключения — компьютер с ADB.</string>
+    <string name="settings_lock_button">Сохранить и заблокировать настройки</string>
+    <string name="settings_lock_confirm_title">Заблокировать настройки?</string>
+    <string name="settings_lock_confirm_text">Это последнее окно перед блокировкой. Дальше отключить защиту (grayscale, DNS, блокировку приложений) на самом телефоне будет НЕЛЬЗЯ — только с компьютера через ADB. Точно продолжить?</string>
+    <string name="settings_lock_confirm_yes">Заблокировать</string>
+    <string name="settings_unlock_header">Отключение — только через компьютер</string>
+    <string name="settings_unlock_hint">Подключите телефон к компьютеру с включённой отладкой по USB и выполните команду:</string>
+    <string name="settings_unlock_note">Команда вернёт цвет экрана, разблокирует DNS, снимет приостановку приложений и удалит права владельца устройства. После этого ZeroPhone можно удалить.</string>
+    <string name="settings_deactivate_header">Полная деактивация</string>
+    <string name="settings_deactivate_hint">Вернёт цвет, разблокирует DNS, снимет приостановку приложений и удалит права владельца устройства. После этого приложение можно удалить.</string>
+    <string name="settings_deactivate_button">Удерживайте 3 секунды…</string>
+    <string name="settings_deactivate_confirm_title">Деактивировать ZeroPhone?</string>
+    <string name="settings_deactivate_confirm_text">Все ограничения будут сняты: grayscale, DNS, блокировка приложений, права владельца устройства. Действие необратимо (повторная настройка — заново через adb).</string>
+    <string name="settings_deactivate_confirm_yes">Деактивировать</string>
+    <string name="settings_deactivate_done_short">Готово</string>
+    <string name="settings_deactivate_done">Готово: все ограничения сняты, права владельца устройства удалены. Приложение теперь можно удалить.</string>
+    <string name="cancel">Отмена</string>
+    <string name="settings_dns_turning_off">Выключаю…</string>
+    <string name="settings_dns_applying">Применяю…</string>
+
+    <!-- App picker -->
+    <string name="picker_title">Отвлекающие приложения</string>
+    <string name="picker_selected_count">Выбрано: %1$d</string>
+    <string name="picker_done">Готово</string>
+    <string name="picker_search_hint">Поиск…</string>
+    <string name="picker_toggle_session">Без таймера: 1 разблокировка до сворачивания</string>
+    <string name="picker_toggles_note">Переключатели задаются один раз — после «Сохранить и заблокировать» их нельзя изменить.</string>
+    <string name="picker_toggles_locked">🔒 Переключатели зафиксированы блокировкой — изменить нельзя.</string>
+    <string name="picker_usage_banner">Для «цвет» и «без таймера» нужен доступ к использованию.</string>
+    <string name="picker_usage_grant">Выдать</string>
+    <string name="dashboard_active_session">Сессия: %1$s — без таймера, до сворачивания</string>
+    <string name="dashboard_media_hold">⏸ Таймер приостановлен: воспроизводится видео</string>
+
+    <!-- Media hold -->
+    <string name="media_listener_label">ZeroPhone (пауза таймера на видео)</string>
+    <string name="settings_media_header">Не прерывать видео</string>
+    <string name="settings_media_hint">Если в открытом приложении воспроизводится видео, 5-минутный таймер не срабатывает: окно продлевается, пока идёт воспроизведение. Как только видео остановится — окно закроется и появится проверка.</string>
+    <string name="settings_media_access_hint">Для работы нужен доступ к уведомлениям (читаются только медиасессии).</string>
+    <string name="settings_media_grant">Выдать доступ к уведомлениям</string>
+    <string name="provisioning_step5">5. Для «не прерывать видео» — доступ к уведомлениям (альтернатива: кнопка в настройках):</string>
+
+    <!-- Provisioning -->
+    <string name="provisioning_title">Установка</string>
+    <string name="provisioning_step1">1. Владелец устройства — на чистом/сброшенном телефоне без аккаунтов, через adb:</string>
+    <string name="provisioning_step2">2. Право записи системных настроек (обязательно для grayscale; повторять после каждой переустановки):</string>
+    <string name="provisioning_step3">3. Необязательно, для надёжности будильников в Doze:</string>
+    <string name="provisioning_step4">4. Для режимов «цвет в приложении» и «без таймера» — доступ к статистике использования (альтернатива: кнопка в окне выбора приложений):</string>
+
+    <string name="provisioning_copy">Копировать</string>
+    <string name="provisioning_copied">Скопировано</string>
+    <string name="provisioning_camera_note">Для проверки внимания приложению нужен доступ к камере — запросите его при первом входе в проверку.</string>
+
+    <!-- Gate -->
+    <string name="gate_title">Проверка внимания</string>
+    <string name="gate_subtitle">Смотрите в экран %1$d секунд. Не отворачивайтесь.</string>
+    <string name="gate_wait_face">Смотрите в камеру</string>
+    <string name="gate_keep_watching">Отлично, продолжайте смотреть</string>
+    <string name="gate_stopped_face">Вы отвлеклись — таймер остановлен</string>
+    <string name="gate_stopped_focus">Вы ушли с экрана — таймер остановлен</string>
+    <string name="gate_stopped_screen">Экран погас — таймер остановлен</string>
+    <string name="gate_stopped_camera_error">Нет доступа к камере. Разрешите его в настройках приложения.</string>
+    <string name="gate_retry">Попробовать снова</string>
+    <string name="gate_not_now">Не сейчас</string>
+    <string name="gate_open_settings">Открыть настройки приложения</string>
+    <string name="gate_completed">Проверка пройдена</string>
+    <string name="gate_camera_privacy">Анализ идёт только на устройстве. Во время проверки горит индикатор камеры.</string>
+    <string name="gate_remaining_seconds">%1$d с</string>
+
+    <!-- Notifications -->
+    <string name="channel_enforcement">Защита ZeroPhone</string>
+    <string name="channel_enforcement_desc">Постоянный контроль grayscale и блокировок</string>
+    <string name="channel_gate">Проверка внимания</string>
+    <string name="channel_gate_desc">Напоминание о проверке при окончании окна доступа</string>
+    <string name="enforcement_notification_title">ZeroPhone активен</string>
+    <string name="enforcement_notification_text">Контроль grayscale и отвлекающих приложений</string>
+    <string name="gate_notification_title">Окно доступа закончилось</string>
+    <string name="gate_notification_text">Нажмите, чтобы пройти проверку и войти заново</string>
+</resources>
