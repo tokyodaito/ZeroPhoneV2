@@ -33,6 +33,15 @@ class DataStoreSettingsRepository(
 ) : SettingsRepository {
     private val json = Json { ignoreUnknownKeys = true }
 
+    // The enforcement watcher polls snapshot() every second; decoding the full
+    // AppState JSON on each poll showed up as real background CPU. The raw
+    // string is a perfect cache key — re-decode only when it changed.
+    @Volatile
+    private var cachedRaw: String? = null
+
+    @Volatile
+    private var cachedState: AppState? = null
+
     override val state: Flow<AppState> =
         context.dataStore.data.map { prefs -> decode(prefs[KEY_STATE]) }
 
@@ -54,14 +63,20 @@ class DataStoreSettingsRepository(
         }
     }
 
-    private fun decode(raw: String?): AppState =
-        raw?.let {
-            try {
-                json.decodeFromString<AppState>(it)
-            } catch (_: Exception) {
-                null
-            }
-        } ?: AppState()
+    private fun decode(raw: String?): AppState {
+        if (raw == cachedRaw) return cachedState ?: AppState()
+        val state =
+            raw?.let {
+                try {
+                    json.decodeFromString<AppState>(it)
+                } catch (_: Exception) {
+                    null
+                }
+            } ?: AppState()
+        cachedRaw = raw
+        cachedState = state
+        return state
+    }
 
     private companion object {
         val KEY_STATE: Preferences.Key<String> = stringPreferencesKey("app_state_json")

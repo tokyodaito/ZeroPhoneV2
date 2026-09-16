@@ -4,11 +4,14 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.numenlabs.zerophonev2.R
@@ -16,9 +19,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Always-on keep-alive for the grayscale re-assertion: ContentObservers only
@@ -32,9 +37,38 @@ import kotlinx.coroutines.launch
 class EnforcementService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** Screen state: with the display off the color exception and per-session watching are invisible — the watcher sleeps deep. */
+    @Volatile
+    private var screenOn: Boolean = true
+
+    /** Wakes the watcher loop at once when the screen comes back on. */
+    private val screenWaker = Channel<Unit>(Channel.CONFLATED)
+
+    private val screenReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context?,
+                intent: Intent?,
+            ) {
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_OFF -> screenOn = false
+                    Intent.ACTION_SCREEN_ON -> {
+                        screenOn = true
+                        screenWaker.trySend(Unit)
+                    }
+                }
+            }
+        }
+
     override fun onCreate() {
         super.onCreate()
         val app = applicationContext as com.numenlabs.zerophonev2.ZeroPhoneApp
+        screenOn =
+            try {
+                getSystemService(PowerManager::class.java).isInteractive
+            } catch (_: Exception) {
+                true
+            }
         // Guard against resurrection: the service is only meaningful while
         // grayscale enforcement is on and writable — otherwise stop at once.
         serviceScope.launch {
@@ -49,6 +83,18 @@ class EnforcementService : Service() {
         app.container.grayscaleController.registerObservers {
             app.container.engine.requestGrayscaleReassert()
         }
+        try {
+            ContextCompat.registerReceiver(
+                this,
+                screenReceiver,
+                IntentFilter().apply {
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_SCREEN_ON)
+                },
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+        } catch (_: Exception) {
+        }
         serviceScope.launch {
             while (isActive) {
                 delay(SELF_CHECK_INTERVAL_MILLIS)
@@ -61,7 +107,11 @@ class EnforcementService : Service() {
     /**
      * Polls the foreground app (only while the per-app switches actually need
      * it) and feeds changes to the engine: per-session grant closing and the
-     * per-app color exception.
+     * per-app color exception. Battery tiers: 1 s while anything needs
+     * watching (screen on), 5 s idle, 30 s deep sleep with the screen off —
+     * except the media hold (music with the screen off), which keeps ticking
+     * at a relaxed 5 s so the timer never fires mid-album. SCREEN_ON breaks
+     * the sleep at once.
      */
     private fun startForegroundWatcher(app: com.numenlabs.zerophonev2.ZeroPhoneApp) {
         serviceScope.launch {
@@ -87,36 +137,57 @@ class EnforcementService : Service() {
                 val mediaHoldNeeded =
                     state != null && grant != null && !grant.perSession && state.pauseTimerOnMedia &&
                         com.numenlabs.zerophonev2.media.MediaWatcher.hasNotificationAccess(this@EnforcementService)
-                if (!watcherNeeded && !mediaHoldNeeded) {
-                    if (announced) {
-                        announced = false
-                        // Leaving watch mode: make sure grayscale is back on target.
-                        app.container.engine.requestGrayscaleReassert()
-                    }
-                    delay(WATCHER_IDLE_INTERVAL_MILLIS)
-                    continue
-                }
-                announced = true
-                if (watcherNeeded) {
-                    val pkg = ForegroundWatcher.lastForegroundPackage(this@EnforcementService)
-                    if (pkg != lastSeen) {
-                        lastSeen = pkg
-                        stableCount = 1
-                        app.container.engine.onForegroundChanged(pkg)
-                    } else if (pkg != null) {
-                        stableCount++
-                        // Require 2 consecutive identical reads (~2 s): activity
-                        // transitions briefly flash the launcher, and that flicker
-                        // must not end a per-session window.
-                        if (stableCount == STABLE_POLLS_REQUIRED) {
-                            app.container.engine.onForegroundStable(pkg)
+
+                val interval: Long = when {
+                    // Screen off: nothing the watcher decides is visible. Only the
+                    // media hold stays awake (music keeps playing), at a relaxed
+                    // pace — the 60 s extension window tolerates 5 s checks.
+                    !screenOn -> {
+                        if (mediaHoldNeeded) {
+                            app.container.engine.extendGrantWhileMedia()
+                            WATCHER_SCREEN_OFF_MEDIA_MILLIS
+                        } else {
+                            if (announced) {
+                                announced = false
+                                app.container.engine.requestGrayscaleReassert()
+                            }
+                            WATCHER_DEEP_IDLE_MILLIS
                         }
                     }
+                    !watcherNeeded && !mediaHoldNeeded -> {
+                        if (announced) {
+                            announced = false
+                            // Leaving watch mode: make sure grayscale is back on target.
+                            app.container.engine.requestGrayscaleReassert()
+                        }
+                        WATCHER_IDLE_INTERVAL_MILLIS
+                    }
+                    else -> {
+                        announced = true
+                        if (watcherNeeded) {
+                            val pkg = ForegroundWatcher.lastForegroundPackage(this@EnforcementService)
+                            if (pkg != lastSeen) {
+                                lastSeen = pkg
+                                stableCount = 1
+                                app.container.engine.onForegroundChanged(pkg)
+                            } else if (pkg != null) {
+                                stableCount++
+                                // Require 2 consecutive identical reads (~2 s): activity
+                                // transitions briefly flash the launcher, and that flicker
+                                // must not end a per-session window.
+                                if (stableCount == STABLE_POLLS_REQUIRED) {
+                                    app.container.engine.onForegroundStable(pkg)
+                                }
+                            }
+                        }
+                        if (mediaHoldNeeded) {
+                            app.container.engine.extendGrantWhileMedia()
+                        }
+                        WATCHER_ACTIVE_INTERVAL_MILLIS
+                    }
                 }
-                if (mediaHoldNeeded) {
-                    app.container.engine.extendGrantWhileMedia()
-                }
-                delay(WATCHER_ACTIVE_INTERVAL_MILLIS)
+                // Sleep for the tier interval, or break out at once on screen-on.
+                withTimeoutOrNull(interval) { screenWaker.receive() }
             }
         }
     }
@@ -129,6 +200,10 @@ class EnforcementService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        try {
+            unregisterReceiver(screenReceiver)
+        } catch (_: Exception) {
+        }
         val app = applicationContext as com.numenlabs.zerophonev2.ZeroPhoneApp
         app.container.grayscaleController.unregisterObservers()
         serviceScope.cancel()
@@ -173,6 +248,8 @@ class EnforcementService : Service() {
         private const val SELF_CHECK_INTERVAL_MILLIS = 60_000L
         private const val WATCHER_ACTIVE_INTERVAL_MILLIS = 1_000L
         private const val WATCHER_IDLE_INTERVAL_MILLIS = 5_000L
+        private const val WATCHER_SCREEN_OFF_MEDIA_MILLIS = 5_000L
+        private const val WATCHER_DEEP_IDLE_MILLIS = 30_000L
         private const val STABLE_POLLS_REQUIRED = 2
 
         @Volatile

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.numenlabs.zerophonev2.R
 import com.numenlabs.zerophonev2.ZeroPhoneApp
@@ -42,7 +43,9 @@ fun DashboardScreen(
     val context = LocalContext.current
     val app = context.applicationContext as ZeroPhoneApp
     val viewModel: DashboardViewModel = viewModel(factory = DashboardViewModel.Factory(app))
-    val uiState by viewModel.uiState.collectAsState()
+    // Lifecycle-aware: the 1 s countdown ticker must not keep firing while
+    // the app is backgrounded with a live activity.
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val provisioning = uiState.provisioning
 
     // Reconcile + keep-alive + fresh app labels on every resume of the dashboard.

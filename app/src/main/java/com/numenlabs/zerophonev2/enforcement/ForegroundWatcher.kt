@@ -47,5 +47,5 @@ object ForegroundWatcher {
             null
         }
 
-    private const val WINDOW_MILLIS = 15_000L
+    private const val WINDOW_MILLIS = 4_000L
 }
