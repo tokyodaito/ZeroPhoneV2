@@ -113,6 +113,7 @@
     <string name="gate_fill_light">💡 Подсветка</string>
     <string name="gate_start_button">Запускаем</string>
     <string name="gate_preview_ok">Всё ок? Жмите «Запускаем» — и смотрите на экран</string>
+    <string name="gate_progressive_note">Входов сегодня: %1$d — проверка выросла до %2$d с (макс. 3 мин)</string>
     <string name="gate_open_settings">Открыть настройки приложения</string>
     <string name="gate_completed">Проверка пройдена</string>
     <string name="gate_camera_privacy">Анализ идёт только на устройстве. Во время проверки горит индикатор камеры.</string>

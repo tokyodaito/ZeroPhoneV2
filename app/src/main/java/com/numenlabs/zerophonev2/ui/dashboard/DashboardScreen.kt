@@ -162,7 +162,11 @@ fun DashboardScreen(
                         uiState.apps.map {
                             com.numenlabs.zerophonev2.ui.AppInfo(it.packageName, it.label, it.icon)
                         },
-                    onAppClick = { appInfo -> GateActivity.start(context, appInfo.packageName) },
+                    onAppClick = { appInfo ->
+                        uiState.apps
+                            .firstOrNull { it.packageName == appInfo.packageName }
+                            ?.let { viewModel.onAppClicked(it) }
+                    },
                 )
             }
             Spacer(Modifier.height(24.dp))

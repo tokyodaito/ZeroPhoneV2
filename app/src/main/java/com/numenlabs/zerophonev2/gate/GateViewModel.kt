@@ -9,6 +9,7 @@ import com.numenlabs.zerophonev2.core.gate.AttentionPolicy
 import com.numenlabs.zerophonev2.core.gate.GateEvent
 import com.numenlabs.zerophonev2.core.gate.GateState
 import com.numenlabs.zerophonev2.core.gate.GateStateMachine
+import com.numenlabs.zerophonev2.core.policy.ProgressiveGatePolicy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -59,6 +60,10 @@ class GateViewModel(
     private val _totalSeconds = MutableStateFlow(60)
     val totalSeconds: StateFlow<Int> = _totalSeconds.asStateFlow()
 
+    /** Prior entries into this app today (drives the progressive duration). */
+    private val _entriesToday = MutableStateFlow(0)
+    val entriesToday: StateFlow<Int> = _entriesToday.asStateFlow()
+
     private val _vmEvents = MutableSharedFlow<GateVmEvent>(extraBufferCapacity = 4)
     val vmEvents: SharedFlow<GateVmEvent> = _vmEvents.asSharedFlow()
 
@@ -73,11 +78,18 @@ class GateViewModel(
 
     init {
         viewModelScope.launch {
-            // Display-only: the FSM is built with the default 60 s. A custom
-            // gateDurationMillis would need loading BEFORE Start (DataStore read
-            // is async); not wired to any UI today — revisit if it ever becomes
-            // user-configurable.
-            gateDurationMillis = app.container.repository.snapshot().gateDurationMillis
+            // Progressive gate: 60 s floor, +30 s per prior entry today, 3 min cap.
+            val state = app.container.repository.snapshot()
+            val today = java.time.LocalDate.now().toString()
+            val entries =
+                ProgressiveGatePolicy.entriesToday(
+                    storedDate = state.gateUsageDate,
+                    counts = state.gateUsageCounts,
+                    packageName = targetPackage,
+                    todayIso = today,
+                )
+            _entriesToday.value = entries
+            gateDurationMillis = ProgressiveGatePolicy.durationMillis(entries)
             _totalSeconds.value = (gateDurationMillis / 1000L).toInt().coerceAtLeast(1)
         }
         viewModelScope.launch {
@@ -129,11 +141,14 @@ class GateViewModel(
 
     fun screenOff() = send(GateEvent.ScreenOff(SystemClock.elapsedRealtime()))
 
-    /** «Запускаем»: begin the 60-second countdown (after the self-check preview). */
+    /** «Запускаем»: begin the countdown (after the self-check preview). */
     fun startCountdown() {
         if (_countdownStarted.value) return
         _countdownStarted.value = true
         val now = SystemClock.elapsedRealtime()
+        // The machine is (re)built here so the progressive duration — loaded
+        // asynchronously in init — is guaranteed to be baked in before Start.
+        stateMachine = GateStateMachine(gateDurationMillis)
         send(GateEvent.Start(now))
         // The face was likely already confirmed DURING the preview — the hysteresis
         // only emits on transitions, so its FacePresent went to the Idle FSM and

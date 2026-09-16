@@ -207,11 +207,17 @@ class EnforcementEngine(
                     id = UUID.randomUUID().toString(),
                     perSession = state.perAppConfig[packageName]?.perSession == true,
                 )
+            // Progressive gate: count this successful entry (per-app, daily).
+            val today = java.time.LocalDate.now().toString()
             repository.update { current ->
+                val rolledDate = current.gateUsageDate != today
+                val baseCounts = if (rolledDate) emptyMap() else current.gateUsageCounts
                 current.copy(
                     activeGrant = grant,
                     lastSuspended = current.lastSuspended - packageName,
                     gatePassCount = current.gatePassCount + 1,
+                    gateUsageDate = today,
+                    gateUsageCounts = baseCounts + (packageName to (baseCounts[packageName] ?: 0) + 1),
                 )
             }
             if (!grant.perSession) {

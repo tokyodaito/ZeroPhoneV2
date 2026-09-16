@@ -427,6 +427,7 @@ private fun GateContent(
     val lightOn by viewModel.lightOn.collectAsState()
     val lightLevel by viewModel.lightLevel.collectAsState()
     val countdownStarted by viewModel.countdownStarted.collectAsState()
+    val entriesToday by viewModel.entriesToday.collectAsState()
     val context = LocalContext.current
 
     // Fill light also raises the window brightness proportionally; restore on dispose.
@@ -542,8 +543,17 @@ private fun GateContent(
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
                 )
+                if (entriesToday > 0) {
+                    Text(
+                        text = stringResource(R.string.gate_progressive_note, entriesToday, totalSeconds),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFFFFC107),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
 
                 val current = state
                 val overlayStatus =

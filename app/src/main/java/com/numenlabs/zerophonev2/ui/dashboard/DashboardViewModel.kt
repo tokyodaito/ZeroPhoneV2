@@ -96,6 +96,32 @@ class DashboardViewModel(private val app: ZeroPhoneApp) : ViewModel() {
         }
     }
 
+    /** Tap in the dashboard grid: an active window for this app → straight in, otherwise the gate. */
+    fun onAppClicked(target: DistractingApp) {
+        viewModelScope.launch {
+            val state = app.container.repository.snapshot()
+            val grant = state.activeGrant
+            val windowOpen =
+                grant != null && grant.packageName == target.packageName &&
+                    (grant.perSession ||
+                        com.numenlabs.zerophonev2.core.ledger.GrantLedger.remainingMillis(
+                            grant,
+                            System.currentTimeMillis() + state.clockSkewMillis,
+                        ) != null)
+            if (windowOpen) {
+                try {
+                    app.packageManager.getLaunchIntentForPackage(target.packageName)?.let {
+                        it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        app.startActivity(it)
+                    }
+                } catch (_: Exception) {
+                }
+            } else {
+                com.numenlabs.zerophonev2.gate.GateActivity.start(app, target.packageName)
+            }
+        }
+    }
+
     fun requestReconcile() {
         app.container.engine.scope.launch {
             try {

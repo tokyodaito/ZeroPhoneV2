@@ -44,6 +44,9 @@ data class AppState(
     val locked: Boolean = false,
     /** Don't fire the 5-minute timer while the granted app is playing media (video). */
     val pauseTimerOnMedia: Boolean = true,
+    /** Progressive gate: day (ISO) the per-app entry counters belong to. */
+    val gateUsageDate: String = "",
+    val gateUsageCounts: Map<String, Int> = emptyMap(),
     val grantDurationMillis: Long = 300_000L,
     val gateDurationMillis: Long = 60_000L,
     val clockSkewMillis: Long = 0L,
